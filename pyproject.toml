@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "orchestre-ia"
+version = "0.2.0"
+description = "ORCHESTRE IA - musicien artificiel qui écoute un chanteur et l'accompagne avec un orchestre virtuel."
+requires-python = ">=3.12,<3.13"
+readme = "README.md"
+dependencies = [
+    "numpy>=2.0",
+    "scipy>=1.13",
+    "sounddevice>=0.5",
+    "PySide6>=6.7",
+    "mido>=1.3",
+    "librosa>=0.10",
+    "soundfile>=0.12",
+    "pyfluidsynth>=1.3",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-qt>=4.4"]
+
+[project.scripts]
+orchestre-ia = "orchestre_ia.app.application:main"
+
+[tool.setuptools.packages.find]
+include = ["orchestre_ia*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "hardware: test qui utilise le vrai matériel audio (micro). Désactivable avec -m 'not hardware'.",
+]
+addopts = "-ra"
+filterwarnings = [
+    # sounddevice 0.5.6 utilise une API NumPy dépréciée en 2.5 ; sans effet fonctionnel
+    "ignore:Setting the shape on a NumPy array:DeprecationWarning:sounddevice",
+]

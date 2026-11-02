@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#262c3d"/>
+      <stop offset="1" stop-color="#0d0f15"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#c97b16"/>
+      <stop offset="0.55" stop-color="#f0b046"/>
+      <stop offset="1" stop-color="#ffe0a0"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.72" cy="0.26" r="0.6">
+      <stop offset="0" stop-color="#f0b046" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#f0b046" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="58" fill="url(#bg)"/>
+  <rect x="8" y="8" width="240" height="240" rx="58" fill="url(#glow)"/>
+  <rect x="9" y="9" width="238" height="238" rx="57" fill="none" stroke="#ffffff" stroke-opacity="0.09" stroke-width="2"/>
+  <!-- ondes sonores : la voix -->
+  <rect x="46" y="118" width="24" height="72" rx="12" fill="url(#gold)" opacity="0.5"/>
+  <rect x="82" y="92" width="24" height="98" rx="12" fill="url(#gold)" opacity="0.72"/>
+  <rect x="118" y="132" width="24" height="58" rx="12" fill="url(#gold)" opacity="0.9"/>
+  <!-- baguette du chef d'orchestre -->
+  <path d="M160 196 L204 76" stroke="url(#gold)" stroke-width="11" stroke-linecap="round"/>
+  <circle cx="160" cy="196" r="13" fill="url(#gold)"/>
+  <!-- étincelle : l'intelligence -->
+  <path d="M210 38 L216 56 L234 62 L216 68 L210 86 L204 68 L186 62 L204 56 Z" fill="#ffe0a0"/>
+</svg>
