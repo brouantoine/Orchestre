@@ -81,6 +81,7 @@ Avant commercialisation, faire valider ce point ou passer à FluidR3_GM original
 | SDL3, libsndfile (livrées avec FluidSynth) | zlib, LGPL 2.1 | OK en liaison dynamique |
 | PyTorch (si utilisé) | BSD-3 | OK, mais lourd : n'ajouter que si un modèle l'exige |
 | FAISS (si utilisé) | MIT | Probablement inutile : une bibliothèque de quelques milliers de chansons se compare en NumPy |
+| PyAV 19.0.2 (FFmpeg intégré) | BSD-3 / LGPL 2.1 | OK en liaison dynamique ; sert à lire m4a, webm, opus, aac pour l'étude de chants |
 
 Les SoundFonts devront avoir une licence permettant la redistribution commerciale.
 Ce point sera vérifié individuellement en phase 4.
@@ -88,3 +89,19 @@ Ce point sera vérifié individuellement en phase 4.
 ## D8 — Avertissement connu
 sounddevice 0.5.6 utilise une API NumPy dépréciée en 2.5 (`DeprecationWarning`).
 Sans effet fonctionnel. L'avertissement est filtré dans les tests. À surveiller lors des mises à jour.
+
+## D13 — Apprentissage : écoutes de louange et bibliothèque de chants (2026-11-08)
+- Écoute muette (`--learn-listen`) : aucun son joué, pas de filtre passe-haut (la basse porte l'harmonie),
+  WAV par parties de 5 min avec entête mis à jour toutes les 2 s, veille Windows bloquée.
+- Étude hors ligne : HPSS, temps forts, chroma CQT et chroma de basse par temps ; accords par Viterbi
+  (24 accords + aucun), seconde passe qui avantage les accords de la tonalité locale (+0,06) ; tonalité
+  d'un morceau = rôle des accords + profil de Krumhansl. Bruit écarté par la platitude du chroma.
+- Mémoire : accords relatifs à la tonalité (« IV », « bVII »), compteurs par source (séance ou chant),
+  réétude = remplacement. Confiance pleine après 500 changements d'accord : à 200, une séance inédite
+  était moins bien devinée que par les règles génériques (mesure sur 3 séances réelles).
+- Bibliothèque de chants (`--learn-library`) : un chant par fichier, empreinte du contenu (reprise,
+  doublons), plusieurs processus. Seuls tonalité, tempo et suite d'accords sont conservés, jamais le son.
+  Les fichiers doivent provenir de sources dont l'utilisateur a le droit de se servir : les conditions de
+  YouTube interdisent le téléchargement sans autorisation de l'ayant droit.
+- Limite assumée : la mémoire apprend des habitudes (quel accord suit souvent), pas la grille exacte d'un
+  chant. Jouer la grille exacte demandera de reconnaître le chant chanté (phase 6).

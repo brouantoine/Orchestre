@@ -21,7 +21,20 @@
 - [ ] Bibliothèque de référence autorisée (chansons du domaine public, compositions de l'utilisateur).
 
 ## Phase 7 — Apprentissage
-- [ ] Mémoire individuelle SQLite : tonalités, tempos, styles préférés, corrections d'accords.
+- [x] Écoute muette d'une séance (louange) : `--learn-listen`, `ecouter_louange.bat` (2026-11-08).
+- [x] Étude hors ligne : tonalité, tempo et accords par morceau ; mémoire SQLite des enchaînements et accords favoris.
+- [x] Le chef d'orchestre utilise la mémoire (confiance croissante avec le nombre d'enchaînements entendus).
+- [x] Mesure : accord suivant deviné, règles génériques contre habitudes apprises (morceaux tenus à part).
+- [x] Bibliothèque de chants : `--learn-library`, `etudier_chants.bat`, mp3/m4a/webm via PyAV, parallèle, reprise.
+- [ ] Déposer des centaines de chants (sources autorisées) dans Musique\Orchestre chants et lancer l'étude.
+- [ ] Phase 6 avec cette bibliothèque : garder la grille de chaque chant et la mélodie chantée, reconnaître
+      le chant en direct, puis jouer sa grille en avance au lieu de deviner accord par accord.
+- [ ] Écouter d'autres séances de louange : la mémoire en mineur n'a que 18 % de confiance (2026-11-08).
+- [ ] Brancher l'ordinateur sur la table de mixage (sortie ligne) : le micro intégré capte surtout la salle.
+- [ ] Vérifier le tempo : 120-136 BPM détectés, peut-être le double du tempo ressenti (60-68).
+- [ ] Apprendre aussi le style rythmique (batterie, basse) et les tempos préférés pour régler l'orchestre.
+- [ ] Mémoire individuelle : styles préférés, corrections d'accords faites par l'utilisateur.
+- [ ] Vue Apprentissage de l'interface : séances, morceaux, habitudes, bouton « Étudier ».
 - [ ] Bibliothèque collective avec consentement explicite ; jamais d'envoi automatique des voix.
 
 ## Phases 8 à 10
@@ -30,4 +43,4 @@
 - [ ] PyInstaller (dossier, DLL FluidSynth, SoundFont, licences), installateur, guide utilisateur.
 
 ## Outillage
-- [ ] Installer Git et versionner le projet.
+- [x] Git installé, projet versionné et publié sur https://github.com/brouantoine/Orchestre (2026-11-02).

@@ -17,6 +17,9 @@ Voir [PROJECT_STATUS.md](PROJECT_STATUS.md) pour l'état exact et [TODO.md](TODO
 - **Son** : FluidSynth et la banque FluidR3Mono (MIT), synthé intégré de secours, placement des notes à l'échantillon près.
 - **Haut-parleurs** : garde anti-réécoute ; l'orchestre s'accorde sur le diapason du chanteur.
 - **Interface** : Studio, Analyse, Orchestre et Paramètres opérationnels. Bibliothèque et Apprentissage indiquent leur phase, sans rien simuler.
+- **Apprentissage (base de la phase 7)** : écoute muette d'une séance entière (louange, répétition), étude hors ligne
+  (tonalités, tempos, accords par morceau), mémoire SQLite des habitudes d'accords. Le chef d'orchestre s'en sert
+  au lancement suivant : enchaînements préférés de l'équipe, accords d'emprunt (bVII…) devenus familiers.
 
 ## Installation (développement)
 
@@ -39,6 +42,37 @@ cd C:\Users\DELL\ORCHESTRE_IA
 .\.venv\Scripts\python.exe -m orchestre_ia --accompany-file chant.wav --style gospel --tempo 76
 ```
 
+### Apprendre en écoutant la louange
+
+Double-cliquer sur `ecouter_louange.bat`, ou :
+
+```powershell
+# écoute muette (aucun son joué), parties de 5 min, veille bloquée ; Ctrl+C pour arrêter
+.\.venv\Scripts\python.exe -m orchestre_ia --learn-listen --label louange
+# étudier toutes les nouvelles séances et mettre à jour la mémoire (≈ 6 s de calcul par minute écoutée)
+.\.venv\Scripts\python.exe -m orchestre_ia --learn-study
+# réétudier une séance précise
+.\.venv\Scripts\python.exe -m orchestre_ia --learn-study "$env:APPDATA\OrchestreIA\apprentissage\ecoutes\<séance>" --force
+```
+
+L'étude affiche chaque morceau trouvé (tonalité, tempo, progression typique), puis la part d'accords suivants
+devinés avec les règles génériques et avec les habitudes apprises, mesurée sur des morceaux tenus à part.
+
+### Apprendre sur une bibliothèque de chants
+
+Déposer les fichiers dans `Musique\Orchestre chants` (un chant par fichier : mp3, m4a, webm, opus, aac, mp4,
+wav, flac, ogg), puis double-cliquer sur `etudier_chants.bat`, ou glisser un autre dossier sur ce fichier.
+
+```powershell
+.\.venv\Scripts\python.exe -m orchestre_ia --learn-library                       # Musique\Orchestre chants
+.\.venv\Scripts\python.exe -m orchestre_ia --learn-library "D:\chants" --workers 4
+```
+
+Plusieurs chants sont étudiés en parallèle (environ 30 s de calcul par chant de 5 min et par processus).
+Ctrl+C interrompt sans rien perdre : la reprise saute les chants déjà étudiés, même renommés. Seuls la
+tonalité, le tempo et la suite d'accords sont gardés. N'utiliser que des fichiers dont on a le droit de se
+servir : les conditions de YouTube interdisent le téléchargement sans l'accord de l'ayant droit.
+
 FluidSynth (DLL) est dans `vendor\fluidsynth\` et la banque de sons dans `orchestre_ia\resources\soundfonts\`.
 
 ## Tests
@@ -52,6 +86,8 @@ FluidSynth (DLL) est dans `vendor\fluidsynth\` et la banque de sons dans `orches
 
 `%APPDATA%\OrchestreIA\` contient `config.json`, `logs\orchestre_ia.log` et
 `enregistrements\` (fichiers WAV créés seulement si la case « Enregistrer ma voix » est cochée).
+`apprentissage\ecoutes\<date>_<nom>\` contient les séances écoutées (`partie_NNN.wav`, `seance.json`) et
+`apprentissage\memoire.sqlite` la mémoire musicale. Rien n'est transmis.
 La variable `ORCHESTRE_IA_HOME` permet de déplacer ce dossier.
 
 ## Documentation

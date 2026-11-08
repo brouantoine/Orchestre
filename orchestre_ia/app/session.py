@@ -8,6 +8,7 @@ from orchestre_ia.analysis.engine import AnalysisEngine
 from orchestre_ia.audio.capture import AudioCaptureEngine, CaptureSettings
 from orchestre_ia.conductor.conductor import AccompanimentSettings, Conductor, ConductorState
 from orchestre_ia.core.events import EventBus
+from orchestre_ia.learning.memory import LearnedHarmony, load_learned_harmony
 from orchestre_ia.synthesis.output import AudioOutputEngine
 
 log = logging.getLogger(__name__)
@@ -20,12 +21,21 @@ class MusicSession:
         capture: AudioCaptureEngine | None = None,
         output: AudioOutputEngine | None = None,
         settings: AccompanimentSettings | None = None,
+        learned: LearnedHarmony | None = None,
     ) -> None:
         self.bus = bus
         self.capture = capture or AudioCaptureEngine(bus)
         self.analysis = AnalysisEngine(bus)
         self.output = output or AudioOutputEngine(bus)
-        self.conductor = Conductor(bus, self.analysis, self.output, settings)
+        # habitudes apprises des séances écoutées (louange…), si elles existent
+        self.learned = learned if learned is not None else load_learned_harmony()
+        if self.learned is not None:
+            log.info(
+                "Mémoire musicale chargée : confiance %.0f %% (majeur), %.0f %% (mineur)",
+                100 * self.learned.reliability(False),
+                100 * self.learned.reliability(True),
+            )
+        self.conductor = Conductor(bus, self.analysis, self.output, settings, learned=self.learned)
         self.analysis.sounding_notes = self.output.sounding_notes
         self.analysis.output_level = self.output.level_between
         self.capture.add_consumer(self.analysis.feed)

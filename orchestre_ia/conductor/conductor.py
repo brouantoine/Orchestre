@@ -22,6 +22,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import TYPE_CHECKING
 
 from orchestre_ia.analysis.engine import AnalysisEngine, AnalysisSnapshot
 from orchestre_ia.analysis.theory import Chord, Key
@@ -32,6 +33,9 @@ from orchestre_ia.instruments.drums import DrumEngine
 from orchestre_ia.instruments.piano import PianoEngine
 from orchestre_ia.instruments.styles import DEFAULT_STYLE, STYLES, Style
 from orchestre_ia.synthesis.output import AudioOutputEngine
+
+if TYPE_CHECKING:
+    from orchestre_ia.learning.memory import LearnedHarmony
 
 log = logging.getLogger(__name__)
 
@@ -89,13 +93,14 @@ class Conductor:
         output: AudioOutputEngine,
         settings: AccompanimentSettings | None = None,
         lookahead_s: float = 0.2,
+        learned: LearnedHarmony | None = None,
     ) -> None:
         self._bus = bus
         self.analysis = analysis
         self.output = output
         self.settings = settings or AccompanimentSettings()
         self.lookahead_s = lookahead_s
-        self.harmony = HarmonyEngine()
+        self.harmony = HarmonyEngine(learned=learned)
         self.piano = PianoEngine()
         self.drums = DrumEngine()
         self.state = ConductorState.IDLE

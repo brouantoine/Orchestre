@@ -4,12 +4,15 @@
     python -m orchestre_ia --list-devices    # liste des micros
     python -m orchestre_ia --test-mic 5      # diagnostic micro de 5 s en console
     python -m orchestre_ia --test-mic 5 --device 9
+    python -m orchestre_ia --learn-listen --label louange   # écoute muette pour apprendre
+    python -m orchestre_ia --learn-study                    # étudie les séances écoutées
 """
 
 from __future__ import annotations
 
 import argparse
 import logging
+import math
 import sys
 import threading
 import time
@@ -36,6 +39,13 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--accompany-file", metavar="WAV", help="accompagne un enregistrement et écrit le mixage")
     parser.add_argument("--style", default="variete", help="style d'accompagnement (variete, pop, gospel, zouglou, jazz, rnb, classique, afro, reggae, soul)")
     parser.add_argument("--tempo", type=float, help="tempo imposé en BPM (sinon détection automatique)")
+    parser.add_argument("--learn-listen", action="store_true", help="écoute muette d'une séance (louange, répétition) pour apprendre ; Ctrl+C pour arrêter")
+    parser.add_argument("--label", default="louange", help="nom de la séance écoutée (défaut : louange)")
+    parser.add_argument("--minutes", type=float, help="durée maximale de l'écoute d'apprentissage")
+    parser.add_argument("--learn-study", nargs="?", const="", metavar="DOSSIER", help="étudie les séances écoutées (toutes les nouvelles, ou un dossier / un WAV) et met à jour la mémoire musicale")
+    parser.add_argument("--learn-library", nargs="?", const="", metavar="DOSSIER", help="étudie un dossier de chants (un chant par fichier : mp3, m4a, webm, wav…) ; défaut : Musique\\Orchestre chants")
+    parser.add_argument("--workers", type=int, help="avec --learn-library : chants étudiés en parallèle (défaut : automatique)")
+    parser.add_argument("--force", action="store_true", help="avec --learn-study / --learn-library : réétudie aussi ce qui l'a déjà été")
     parser.add_argument("--debug", action="store_true", help="journaux détaillés")
     return parser.parse_args(argv)
 
@@ -50,6 +60,12 @@ def main(argv: list[str] | None = None) -> int:
         return print_devices()
     if args.test_mic is not None:
         return run_mic_test(config, args.test_mic, args.device)
+    if args.learn_library is not None:
+        return run_learning_library(args.learn_library or None, args.workers, args.force)
+    if args.learn_study is not None:
+        return run_learning_study(args.learn_study or None, args.force)
+    if args.learn_listen:
+        return run_learning_listen(config, args.device, args.label, args.minutes)
     if args.accompany_file:
         return run_accompany_file(Path(args.accompany_file), args.style, args.tempo)
     return run_gui(config)
@@ -188,6 +204,271 @@ def run_mic_test(config: AppConfig, seconds: float, device_index: int | None) ->
         return 2
     print("RÉSULTAT : capture micro opérationnelle.")
     return 0
+
+
+def run_learning_listen(
+    config: AppConfig,
+    device_index: int | None,
+    label: str,
+    minutes: float | None,
+    stream_factory=None,
+) -> int:
+    """Écoute muette d'une séance entière, enregistrée par parties pour l'apprentissage."""
+    from datetime import datetime
+
+    from orchestre_ia.core.paths import listening_dir
+    from orchestre_ia.learning.listening import (
+        ListeningInfo,
+        SegmentedRecorder,
+        keep_awake,
+        new_session_dir,
+        save_info,
+    )
+
+    _configure_console()
+    device = _resolve_device(config, device_index) if stream_factory is None else None
+    if stream_factory is None and device is None:
+        print("ÉCHEC : aucun micro trouvé. Essayez --list-devices puis --device N.")
+        return 1
+    device_name = device.name if device else "simulé"
+
+    directory = new_session_dir(listening_dir(), label)
+    info = ListeningInfo(label=label, device=device_name, started_at=datetime.now().isoformat(timespec="seconds"))
+    recorder = SegmentedRecorder(directory)
+    recorder.on_segment(lambda _path: _update_info(info, recorder, directory, save_info))
+    save_info(directory, info)
+
+    bus = EventBus()
+    last_level: list[AudioLevelEvent | None] = [None]
+
+    def on_level(event: AudioLevelEvent) -> None:
+        last_level[0] = event
+
+    bus.subscribe(AudioLevelEvent, on_level)
+    engine = AudioCaptureEngine(bus, stream_factory=stream_factory) if stream_factory else AudioCaptureEngine(bus)
+    settings = CaptureSettings(
+        device=device.index if device else None,
+        device_name=device_name,
+        samplerate=config.audio.samplerate,
+        blocksize=config.audio.blocksize,
+        gain_db=0.0,  # signal brut : la séance sera analysée hors ligne
+        highpass_hz=None,  # garder la basse et la grosse caisse
+    )
+    if not engine.start(settings):
+        print("ÉCHEC : impossible d'ouvrir le micro.")
+        return 1
+    info.samplerate = engine.samplerate
+    recorder.start()
+    engine.add_consumer(recorder.write)
+    keep_awake(True)
+
+    print(f"Écoute d'apprentissage « {label} » — micro : {device_name}")
+    print(f"Dossier : {directory}")
+    print("Aucun son ne sera joué. Laissez l'ordinateur branché, couvercle ouvert.")
+    print("Ctrl+C pour arrêter.\n")
+    started = time.monotonic()
+    last_restart = 0.0
+    low_since: float | None = None
+    try:
+        while True:
+            time.sleep(0.25 if stream_factory else 1.0)
+            now = time.monotonic()
+            elapsed = now - started
+            if minutes is not None and elapsed >= minutes * 60:
+                break
+            if engine.state != CaptureState.RUNNING:
+                if now - last_restart >= 3.0:
+                    last_restart = now
+                    print("\nLe micro ne répond plus, nouvelle tentative…")
+                    if engine.start(settings):
+                        info.restarts += 1
+                        print("Micro retrouvé, l'écoute continue.")
+                continue
+            level = last_level[0]
+            db = level.rms_db if level else SILENCE_DB
+            low_since = (low_since or now) if db < -55 else None
+            bar = "#" * max(0, min(30, int((db + 60) / 2)))
+            h, rem = divmod(int(recorder.duration_s), 3600)
+            warn = ""
+            if level and level.clipping:
+                warn = "  SATURE : éloignez le micro"
+            elif low_since is not None and now - low_since > 20:
+                warn = "  très faible : rapprochez le micro"
+            print(f"\r  {h:02d}:{rem // 60:02d}:{rem % 60:02d}  {db:6.1f} dBFS |{bar:<30}|{warn:<36}", end="", flush=True)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        engine.stop()
+        recorder.stop()
+        keep_awake(False)
+        info.ended_at = datetime.now().isoformat(timespec="seconds")
+        _update_info(info, recorder, directory, save_info)
+
+    print("\n\n--- Écoute terminée ---")
+    print(f"Durée enregistrée : {recorder.duration_s / 60:.1f} min en {len(recorder.segments)} partie(s)")
+    print(f"Niveau crête      : {20 * math.log10(max(recorder.peak, 1e-9)):.1f} dBFS")
+    if recorder.clipped_blocks:
+        print(f"Saturation        : {recorder.clipped_blocks} blocs (micro trop près des enceintes)")
+    print(f"Dossier           : {directory}")
+    print("Pour que l'orchestre apprenne de cette séance :")
+    print(r"  .\.venv\Scripts\python.exe -m orchestre_ia --learn-study")
+    return 0 if recorder.frames_written else 1
+
+
+def _hms(seconds: float) -> str:
+    h, rem = divmod(int(seconds), 3600)
+    return f"{h:02d}:{rem // 60:02d}:{rem % 60:02d}"
+
+
+def _sessions_to_study(target: str | None) -> list[tuple[str, str, list[Path], Path | None]]:
+    """(source, nom, fichiers WAV, dossier de séance ou None) pour chaque séance trouvée."""
+    from orchestre_ia.core.paths import listening_dir
+    from orchestre_ia.learning.listening import load_info
+
+    def from_dir(d: Path) -> tuple[str, str, list[Path], Path | None] | None:
+        parts = sorted(d.glob("partie_*.wav"))
+        if not parts:
+            return None
+        info = load_info(d)
+        return str(d.resolve()), info.label if info else d.name, parts, d
+
+    root = Path(target) if target else listening_dir()
+    if root.is_file():
+        return [(str(root.resolve()), root.stem, [root], None)]
+    if not root.is_dir():
+        return []
+    direct = from_dir(root)
+    if direct:
+        return [direct]
+    return [s for s in (from_dir(d) for d in sorted(root.iterdir()) if d.is_dir()) if s]
+
+
+def run_learning_study(target: str | None, force: bool) -> int:
+    """Étudie les séances écoutées et met à jour la mémoire musicale de l'orchestre."""
+    from orchestre_ia.learning.evaluation import evaluate_next_chord
+    from orchestre_ia.learning.listening import load_info, save_info
+    from orchestre_ia.learning.memory import MusicMemory, memory_path
+    from orchestre_ia.learning.study import study_files
+
+    _configure_console()
+    sessions = _sessions_to_study(target)
+    if not sessions:
+        print("Aucune séance à étudier. Lancez d'abord une écoute : --learn-listen")
+        return 1
+    studied = 0
+    with MusicMemory(memory_path()) as memory:
+        for source, label, parts, directory in sessions:
+            name = directory.name if directory else Path(source).name
+            if memory.is_studied(source) and not force:
+                print(f"Déjà étudiée : {name} (--force pour recommencer)")
+                continue
+            info = load_info(directory) if directory else None
+            if info is not None and info.ended_at is None and time.time() - parts[-1].stat().st_mtime < 30:
+                print(f"Écoute en cours : {name} — elle sera étudiée une fois terminée.")
+                continue
+            print(f"\nÉtude de « {label} » ({name}), {len(parts)} partie(s)…")
+            started = time.monotonic()
+            result = study_files(parts, lambda i, n, path: print(f"  partie {i + 1}/{n} : {path.name}", flush=True))
+            score = evaluate_next_chord(result.pieces, memory.learned(exclude=source))
+            memory.store(source, label, result)
+            studied += 1
+            if directory and info is not None:
+                info.studied = True
+                save_info(directory, info)
+            print(f"  {result.duration_s / 60:.0f} min écoutées, étudiées en {(time.monotonic() - started) / 60:.1f} min")
+            if not result.pieces:
+                print("  Aucun morceau joué reconnu (trop court, trop faible ou sans instruments).")
+            for i, piece in enumerate(result.pieces, 1):
+                print(
+                    f"  {i:>2}. {_hms(piece.start_s)} → {_hms(piece.end_s)}  {piece.key.name}, "
+                    f"{piece.tempo:.0f} BPM, progression {' → '.join(piece.typical_progression())}"
+                )
+                names = piece.chord_names
+                print(f"      accords : {' '.join(names[:12])}{' …' if len(names) > 12 else ''}")
+            if score is not None:
+                print(f"  Accord suivant deviné sur {score.changes} changements (1er choix / parmi 3) :")
+                print(f"      règles génériques   : {score.generic_top1 * 100:3.0f} % / {score.generic_top3 * 100:3.0f} %")
+                print(f"      habitudes apprises  : {score.learned_top1 * 100:3.0f} % / {score.learned_top3 * 100:3.0f} %")
+        print("\n--- Ce que l'orchestre a appris ---")
+        for line in memory.summary_lines():
+            print(f"  {line}")
+    if studied:
+        print("\nL'accompagnement utilisera ces habitudes au prochain lancement de l'application.")
+    return 0
+
+
+def run_learning_library(folder: str | None, workers: int | None, force: bool) -> int:
+    """Étudie un dossier de chants et met à jour la mémoire musicale."""
+    from orchestre_ia.core.paths import songs_dir
+    from orchestre_ia.learning.evaluation import evaluate_folds, pieces_by_source
+    from orchestre_ia.learning.library import default_workers, find_songs, study_library
+    from orchestre_ia.learning.memory import MusicMemory, memory_path
+
+    _configure_console()
+    root = Path(folder) if folder else songs_dir()
+    if not root.exists():
+        if folder:
+            print(f"Dossier introuvable : {root}")
+            return 1
+        root.mkdir(parents=True)
+    count = len(find_songs(root))
+    if count == 0:
+        print(f"Aucun chant dans {root}")
+        print("Formats acceptés : mp3, m4a, webm, opus, aac, mp4, wav, flac, ogg.")
+        return 1
+    workers = workers or default_workers()
+    print(f"Bibliothèque : {root}")
+    print(f"{count} fichier(s) audio, étude de {workers} chant(s) à la fois. Ctrl+C pour interrompre (reprise possible).\n")
+
+    started = time.monotonic()
+
+    def on_song(index: int, total: int, path: Path, outcome) -> None:
+        elapsed = time.monotonic() - started
+        remaining = elapsed / index * (total - index)
+        name = path.stem if len(path.stem) <= 48 else path.stem[:47] + "…"
+        prefix = f"[{index}/{total}, reste ≈ {remaining / 60:.0f} min]"
+        if outcome.result is None:
+            print(f"{prefix} {name} — ignoré : {outcome.error}")
+        elif not outcome.result.pieces:
+            print(f"{prefix} {name} — aucun accord net trouvé")
+        else:
+            main = max(outcome.result.pieces, key=lambda p: p.duration_s)
+            print(
+                f"{prefix} {name} — {main.key.name}, {main.tempo:.0f} BPM, "
+                f"{' → '.join(main.typical_progression())}"
+            )
+
+    with MusicMemory(memory_path()) as memory:
+        try:
+            report = study_library(root, memory, workers=workers, force=force, on_song=on_song)
+        except KeyboardInterrupt:
+            print("\nInterrompu. Les chants déjà étudiés sont gardés ; relancez pour continuer.")
+            return 130
+        print(f"\n--- Bilan ({(time.monotonic() - started) / 60:.1f} min) ---")
+        print(f"  Chants étudiés : {report.studied}, déjà connus : {report.skipped}, doublons : {report.duplicates}")
+        if report.errors:
+            print(f"  Fichiers ignorés : {len(report.errors)} (illisibles ou trop courts)")
+        score = evaluate_folds(pieces_by_source(memory))
+        if score is not None:
+            print(f"  Accord suivant deviné sur des chants mis à part ({score.changes} changements, 1er choix / parmi 3) :")
+            print(f"      règles génériques   : {score.generic_top1 * 100:3.0f} % / {score.generic_top3 * 100:3.0f} %")
+            print(f"      habitudes apprises  : {score.learned_top1 * 100:3.0f} % / {score.learned_top3 * 100:3.0f} %")
+        print("\n--- Ce que l'orchestre a appris ---")
+        for line in memory.summary_lines():
+            print(f"  {line}")
+    print("\nL'accompagnement utilisera ces habitudes au prochain lancement de l'application.")
+    return 0
+
+
+def _update_info(info, recorder, directory: Path, save) -> None:
+    info.duration_s = round(recorder.duration_s, 2)
+    info.segments = [p.name for p in recorder.segments]
+    info.clipped_blocks = recorder.clipped_blocks
+    info.peak = round(recorder.peak, 4)
+    try:
+        save(directory, info)
+    except OSError:
+        log.exception("Écriture de seance.json impossible")
 
 
 def run_gui(config: AppConfig) -> int:

@@ -37,6 +37,21 @@ def recordings_dir() -> Path:
     return user_data_dir() / "enregistrements"
 
 
+def learning_dir() -> Path:
+    """Apprentissage : écoutes enregistrées et mémoire musicale (SQLite). Local uniquement."""
+    return user_data_dir() / "apprentissage"
+
+
+def listening_dir() -> Path:
+    """Séances écoutées pour apprendre (louange, répétitions), une sous-dossier par séance."""
+    return learning_dir() / "ecoutes"
+
+
+def songs_dir() -> Path:
+    """Dossier proposé pour déposer les chants à étudier (Musique > Orchestre chants)."""
+    return Path.home() / "Music" / "Orchestre chants"
+
+
 def log_dir() -> Path:
     path = user_data_dir() / "logs"
     path.mkdir(parents=True, exist_ok=True)

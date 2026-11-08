@@ -1,6 +1,6 @@
 # État du projet — ORCHESTRE IA
 
-Dernière mise à jour : 2026-11-02 — version 0.2.0
+Dernière mise à jour : 2026-11-08 — version 0.2.0 + base de l'apprentissage (phase 7)
 
 ## Terminé et testé
 
@@ -15,8 +15,27 @@ Dernière mise à jour : 2026-11-02 — version 0.2.0
 | Garde anti-réécoute (haut-parleurs) + accord de l'orchestre sur la voix | `test_echo`, test acoustique réel |
 | Interface : Studio, Analyse, Orchestre, Paramètres connectés | `test_ui` + captures d'écran |
 | Logo (SVG, ICO, PNG), icônes, thème « studio de nuit », indicateur de temps, progression d'accords | captures d'écran, `resources/icons/` |
+| Phase 7 (base) — écoute muette d'une séance, étude hors ligne, mémoire SQLite, usage par l'harmonie | `test_learning` + 3 séances de louange réelles |
+| Phase 7 — étude d'une bibliothèque de chants (mp3, m4a, webm…), parallèle, reprise, validation croisée | `test_library` + fichiers mp3/webm d'essai |
 
-**133 tests réussis**, dont 2 sur le vrai micro.
+**159 tests réussis**, dont 2 sur le vrai micro.
+
+## Premières écoutes de louange (2026-11-08, micro intégré, 29 min)
+
+| Séance | Morceaux trouvés | Accord suivant deviné, règles génériques | Avec habitudes apprises |
+|---|---|---|---|
+| 10 h 49, 11 min | 6 (Ré majeur, La majeur, La et Mi mineur) | 45 % (72 % parmi 3) | 49 % (77 % parmi 3) |
+| 11 h 02, 5 min | 1 (Ré majeur, va-et-vient IV–V) | 22 % (95 % parmi 3) | 21 % (95 % parmi 3) |
+| 11 h 25, 13 min | 6 (Mi majeur, Mi mineur, Do majeur, Fa majeur) | 31 % (72 % parmi 3) | 30 % (69 % parmi 3) |
+
+- Habitudes en majeur : I 38 %, IV 23 %, V 23 %, puis ii, iii, vi, bVII ; en mineur : i, bIII, iv, bVII.
+- Confiance : une séance inédite était moins bien devinée quand la mémoire faisait pleine confiance après
+  200 changements d'accord (26 % contre 36 %). Seuil porté à 500 : jamais pire que les règles génériques,
+  légèrement meilleur dans l'ordre chronologique. Confiance actuelle : 59 % en majeur, 10 % en mineur.
+- 29 minutes ne suffisent pas encore à battre nettement les règles génériques sur des chants nouveaux.
+- Lecture de tonalité parfois ambiguë sur les vamps (Lam–Sol : La mineur ou Mi mineur).
+- Étude : environ 6 s de calcul par minute écoutée.
+- Prise de son : notes peu marquées (platitude du chroma médiane 0,91), quelques saturations. Une sortie de table de mixage donnerait des accords plus sûrs.
 
 ## Mesures sur cette machine
 
