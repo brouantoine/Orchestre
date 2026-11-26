@@ -105,3 +105,20 @@ Sans effet fonctionnel. L'avertissement est filtré dans les tests. À surveille
   YouTube interdisent le téléchargement sans autorisation de l'ayant droit.
 - Limite assumée : la mémoire apprend des habitudes (quel accord suit souvent), pas la grille exacte d'un
   chant. Jouer la grille exacte demandera de reconnaître le chant chanté (phase 6).
+
+## D14 — Corpus de grilles d'accords plutôt que téléchargement YouTube (2026-11-24)
+- Objectif : apprendre sur des centaines de milliers de chants. Télécharger YouTube en masse est exclu
+  (conditions d'utilisation, droits d'auteur, modèle invendable) et inutile : la mémoire ne garde que
+  tonalité, tempo et accords, et l'étude audio coûte ≈ 30 s par chant (≈ 1 an de calcul pour un million).
+- Source retenue : Chordonomicon (Kantarelis et al., 2024, arXiv 2410.22046), licence MIT sur Hugging Face,
+  ≈ 680 000 grilles avec sections et genres Spotify, dont ≈ 35 000 de louange (worship, christian, ccm, gospel).
+  Les auteurs considèrent les suites d'accords comme non protégeables ; c'est leur position, pas un avis juridique.
+- Accords : 's' = dièse, 'b' = bémol, basse ignorée, 'Csus4' = Do ; no3d, dim et aug coupent la grille
+  (comme « pas d'accord » dans l'étude audio). Une tonalité par chant, par le rôle des accords (même table que D13).
+- Stockage séparé (`corpus.sqlite`) : versé dans `memoire.sqlite`, le corpus noierait les habitudes de l'équipe.
+  Il sert d'a priori : P(suivant | accord) = (n_équipe + 30 · P_corpus) / (total_équipe + 30), donc
+  l'équipe l'emporte après une trentaine d'enchaînements entendus depuis un accord donné.
+- Mesure (50 000 premiers chants, un sur 20 tenu à part), accord suivant 1er choix / parmi 3 :
+  louange 35 % / 81 % (règles génériques) → 41 % / 83 % (corpus) ; pop 31 % / 73 % → 35 % / 78 %.
+  Le moteur atteint déjà le plafond d'une mémoire à un accord (40 %) ; avec les deux derniers accords : 47 %.
+- Lakh MIDI (CC-BY 4.0) contient des œuvres protégées : réservé à un usage interne si on l'ajoute.

@@ -73,6 +73,20 @@ Ctrl+C interrompt sans rien perdre : la reprise saute les chants déjà étudié
 tonalité, le tempo et la suite d'accords sont gardés. N'utiliser que des fichiers dont on a le droit de se
 servir : les conditions de YouTube interdisent le téléchargement sans l'accord de l'ayant droit.
 
+### Apprendre sur un corpus de grilles d'accords
+
+```powershell
+# télécharge Chordonomicon (≈ 264 Mo, licence MIT, ≈ 680 000 chants) puis l'importe (≈ 2 min)
+.\.venv\Scripts\python.exe -m orchestre_ia --learn-corpus
+.\.venv\Scripts\python.exe -m orchestre_ia --learn-corpus chordonomicon_v2.csv   # fichier déjà téléchargé
+.\.venv\Scripts\python.exe -m orchestre_ia --learn-corpus --limit 50000          # essai rapide
+```
+
+Aucun son : seules les suites d'accords sont lues, ramenées à la tonalité et rangées par groupe
+(louange, afro, pop, rock…) dans `apprentissage\corpus.sqlite`. Le corpus remplace les règles
+génériques ; les habitudes de l'équipe (`--learn-listen`, `--learn-study`) l'emportent dès qu'elles
+sont assez nombreuses. L'import affiche la part d'accords suivants devinés sur des chants tenus à part.
+
 FluidSynth (DLL) est dans `vendor\fluidsynth\` et la banque de sons dans `orchestre_ia\resources\soundfonts\`.
 
 ## Tests

@@ -63,6 +63,13 @@ class _Tally:
         return PredictionScore(n, h["g1"] / n, h["g3"] / n, h["l1"] / n, h["l3"] / n)
 
 
+def evaluate_pieces(pieces: list[Piece], learned: LearnedHarmony) -> PredictionScore | None:
+    """Morceaux jugés avec des habitudes apprises ailleurs (corpus : chants tenus à part)."""
+    tally = _Tally()
+    tally.judge(pieces, learned)
+    return tally.score()
+
+
 def evaluate_next_chord(pieces: list[Piece], base: LearnedHarmony | None = None) -> PredictionScore | None:
     """Chaque morceau jugé avec les habitudes des autres morceaux (+ `base`)."""
     tally = _Tally()

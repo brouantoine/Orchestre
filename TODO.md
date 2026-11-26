@@ -26,6 +26,12 @@
 - [x] Le chef d'orchestre utilise la mémoire (confiance croissante avec le nombre d'enchaînements entendus).
 - [x] Mesure : accord suivant deviné, règles génériques contre habitudes apprises (morceaux tenus à part).
 - [x] Bibliothèque de chants : `--learn-library`, `etudier_chants.bat`, mp3/m4a/webm via PyAV, parallèle, reprise.
+- [x] Corpus de grilles Chordonomicon (≈ 680 000 chants, MIT) : `--learn-corpus`, a priori de la mémoire (2026-11-24).
+- [ ] Mémoire sur les 2 derniers accords (trigrammes) : 47 % d'accords suivants devinés en louange
+      contre 40 % avec le seul accord en cours (mesure du 2026-11-24 sur 50 000 chants).
+- [ ] Tonalité par section dans le corpus (modulations de fin de chant, aujourd'hui une tonalité par chant).
+- [ ] Mesurer corpus + habitudes de l'équipe sur les vraies séances de louange (`--learn-study --force`).
+- [ ] Lakh MIDI (CC-BY 4.0, usage interne) : rythmes de batterie, voicings de piano, mélodie → accords.
 - [ ] Déposer des centaines de chants (sources autorisées) dans Musique\Orchestre chants et lancer l'étude.
 - [ ] Phase 6 avec cette bibliothèque : garder la grille de chaque chant et la mélodie chantée, reconnaître
       le chant en direct, puis jouer sa grille en avance au lieu de deviner accord par accord.

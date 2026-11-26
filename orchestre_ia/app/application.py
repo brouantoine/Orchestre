@@ -6,6 +6,7 @@
     python -m orchestre_ia --test-mic 5 --device 9
     python -m orchestre_ia --learn-listen --label louange   # écoute muette pour apprendre
     python -m orchestre_ia --learn-study                    # étudie les séances écoutées
+    python -m orchestre_ia --learn-corpus                   # importe ≈ 680 000 grilles d'accords
 """
 
 from __future__ import annotations
@@ -44,6 +45,8 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--minutes", type=float, help="durée maximale de l'écoute d'apprentissage")
     parser.add_argument("--learn-study", nargs="?", const="", metavar="DOSSIER", help="étudie les séances écoutées (toutes les nouvelles, ou un dossier / un WAV) et met à jour la mémoire musicale")
     parser.add_argument("--learn-library", nargs="?", const="", metavar="DOSSIER", help="étudie un dossier de chants (un chant par fichier : mp3, m4a, webm, wav…) ; défaut : Musique\\Orchestre chants")
+    parser.add_argument("--learn-corpus", nargs="?", const="", metavar="CSV", help="importe le corpus de grilles d'accords Chordonomicon (≈ 680 000 chants, licence MIT) ; téléchargé s'il manque")
+    parser.add_argument("--limit", type=int, help="avec --learn-corpus : ne lire que les N premiers chants (essai)")
     parser.add_argument("--workers", type=int, help="avec --learn-library : chants étudiés en parallèle (défaut : automatique)")
     parser.add_argument("--force", action="store_true", help="avec --learn-study / --learn-library : réétudie aussi ce qui l'a déjà été")
     parser.add_argument("--debug", action="store_true", help="journaux détaillés")
@@ -60,6 +63,8 @@ def main(argv: list[str] | None = None) -> int:
         return print_devices()
     if args.test_mic is not None:
         return run_mic_test(config, args.test_mic, args.device)
+    if args.learn_corpus is not None:
+        return run_learning_corpus(args.learn_corpus or None, args.limit)
     if args.learn_library is not None:
         return run_learning_library(args.learn_library or None, args.workers, args.force)
     if args.learn_study is not None:
@@ -345,6 +350,7 @@ def _sessions_to_study(target: str | None) -> list[tuple[str, str, list[Path], P
 
 def run_learning_study(target: str | None, force: bool) -> int:
     """Étudie les séances écoutées et met à jour la mémoire musicale de l'orchestre."""
+    from orchestre_ia.learning.corpus import load_corpus_prior
     from orchestre_ia.learning.evaluation import evaluate_next_chord
     from orchestre_ia.learning.listening import load_info, save_info
     from orchestre_ia.learning.memory import MusicMemory, memory_path
@@ -356,6 +362,9 @@ def run_learning_study(target: str | None, force: bool) -> int:
         print("Aucune séance à étudier. Lancez d'abord une écoute : --learn-listen")
         return 1
     studied = 0
+    corpus_prior = load_corpus_prior()
+    if corpus_prior is not None:
+        print("Corpus de grilles importé : les « habitudes apprises » ci-dessous l'incluent.")
     with MusicMemory(memory_path()) as memory:
         for source, label, parts, directory in sessions:
             name = directory.name if directory else Path(source).name
@@ -369,7 +378,9 @@ def run_learning_study(target: str | None, force: bool) -> int:
             print(f"\nÉtude de « {label} » ({name}), {len(parts)} partie(s)…")
             started = time.monotonic()
             result = study_files(parts, lambda i, n, path: print(f"  partie {i + 1}/{n} : {path.name}", flush=True))
-            score = evaluate_next_chord(result.pieces, memory.learned(exclude=source))
+            base = memory.learned(exclude=source)
+            base.prior = corpus_prior  # mesure fidèle à ce que joue l'application
+            score = evaluate_next_chord(result.pieces, base)
             memory.store(source, label, result)
             studied += 1
             if directory and info is not None:
@@ -394,6 +405,73 @@ def run_learning_study(target: str | None, force: bool) -> int:
             print(f"  {line}")
     if studied:
         print("\nL'accompagnement utilisera ces habitudes au prochain lancement de l'application.")
+    return 0
+
+
+def run_learning_corpus(csv_file: str | None, limit: int | None) -> int:
+    """Importe le corpus de grilles d'accords et mesure ce qu'il apporte sur des chants tenus à part."""
+    from orchestre_ia.learning import corpus
+    from orchestre_ia.learning.evaluation import evaluate_pieces
+    from orchestre_ia.learning.memory import MusicMemory
+
+    _configure_console()
+    path = Path(csv_file) if csv_file else corpus.dataset_path()
+    if not path.exists():
+        if csv_file:
+            print(f"Fichier introuvable : {path}")
+            return 1
+        print(f"Téléchargement de Chordonomicon (≈ 264 Mo, licence MIT) vers {path}")
+
+        def on_bytes(done: int, total: int) -> None:
+            if total and done % (16 << 20) < (1 << 20):
+                print(f"  {done / 2**20:.0f} / {total / 2**20:.0f} Mo", flush=True)
+
+        try:
+            corpus.download_dataset(path, progress=on_bytes)
+        except OSError as exc:
+            print(f"Échec : {exc}")
+            print(f"Téléchargez le fichier à la main ({corpus.DATASET_URL}) puis : --learn-corpus <fichier>")
+            return 1
+        except KeyboardInterrupt:
+            print("\nInterrompu. Relancez pour reprendre le téléchargement.")
+            return 130
+
+    print(f"Lecture des grilles : {path}")
+    started = time.monotonic()
+    try:
+        imported = corpus.read_corpus(
+            path, limit=limit, progress=lambda n: print(f"  {n} chants lus…", flush=True)
+        )
+    except KeyboardInterrupt:
+        print("\nInterrompu. Rien n'a été modifié.")
+        return 130
+    counts = imported.full_counts()
+    songs = sum(g.songs for g in counts.values())
+    print(f"{songs} chants retenus sur {imported.rows} ({imported.skipped} trop courts ou illisibles), "
+          f"{(time.monotonic() - started):.0f} s")
+    for name, g in sorted(counts.items(), key=lambda x: -x[1].songs)[:16]:
+        print(f"  {name:<12} {g.songs:>7} chants")
+
+    learned = corpus.merged(list(imported.train.values()))
+    print("\nAccord suivant deviné sur des chants tenus à part (1er choix / parmi 3) :")
+    for group in (corpus.LOUANGE, corpus.AFRO, "pop", "rock"):
+        held = imported.held_out.get(group)
+        if not held:
+            continue
+        score = evaluate_pieces([p for song in held for p in song], learned)
+        if score is None:
+            continue
+        print(f"  {group:<8} ({len(held)} chants, {score.changes} changements) : "
+              f"règles génériques {score.generic_top1 * 100:3.0f} % / {score.generic_top3 * 100:3.0f} %, "
+              f"avec le corpus {score.learned_top1 * 100:3.0f} % / {score.learned_top3 * 100:3.0f} %")
+
+    with MusicMemory(corpus.corpus_path()) as memory:
+        corpus.store_corpus(memory, counts)
+        print(f"\nCorpus rangé dans {corpus.corpus_path()}")
+        for line in memory.summary_lines()[1:]:  # la 1re ligne (heures écoutées) ne concerne que les séances
+            print(f"  {line}")
+    print("\nL'accompagnement s'en servira au prochain lancement ; les habitudes de votre équipe "
+          "(--learn-listen, --learn-study) restent prioritaires dès qu'elles sont assez nombreuses.")
     return 0
 
 

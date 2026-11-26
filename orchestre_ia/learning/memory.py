@@ -93,6 +93,11 @@ class LearnedHarmony:
     transition_weight: float = 0.25
     usage_weight: float = 0.35
     smoothing: float = 2.0
+    # A priori appris sur un corpus de grilles (`learning.corpus`) : il remplace les règles
+    # génériques, et les habitudes de l'équipe le corrigent à mesure qu'elles s'accumulent.
+    # `prior_weight` = nombre de changements d'accord (ou de temps) qu'il « vaut » face à l'équipe.
+    prior: LearnedHarmony | None = None
+    prior_weight: float = 30.0
 
     def __post_init__(self) -> None:
         self._from_totals: dict[tuple[bool, str], int] = defaultdict(int)
@@ -106,20 +111,29 @@ class LearnedHarmony:
 
     @property
     def is_empty(self) -> bool:
-        return not self.transitions and not self.usage
+        own_empty = not self.transitions and not self.usage
+        return own_empty and (self.prior is None or self.prior.is_empty)
 
     def reliability(self, minor: bool) -> float:
-        return min(1.0, self._mode_transitions.get(minor, 0) / self.full_trust_transitions)
+        own = min(1.0, self._mode_transitions.get(minor, 0) / self.full_trust_transitions)
+        return max(own, self.prior.reliability(minor)) if self.prior is not None else own
 
     def usage_share(self, minor: bool, token: str) -> float:
         total = self._mode_beats.get(minor, 0.0)
-        return self.usage.get((minor, token), 0.0) / total if total > 0 else 0.0
+        own = self.usage.get((minor, token), 0.0)
+        if self.prior is not None:
+            weight = self.prior_weight
+            return (own + weight * self.prior.usage_share(minor, token)) / (total + weight)
+        return own / total if total > 0 else 0.0
 
     def transition_probability(self, minor: bool, src: str, dst: str) -> float:
-        """P(dst | src), lissée vers la fréquence d'usage de dst."""
+        """P(dst | src), lissée vers l'a priori du corpus s'il existe, sinon vers la fréquence d'usage de dst."""
         total = self._from_totals.get((minor, src), 0)
-        prior = self.usage_share(minor, dst)
-        return (self.transitions.get((minor, src, dst), 0) + self.smoothing * prior) / (total + self.smoothing)
+        if self.prior is not None:
+            weight, base = self.prior_weight, self.prior.transition_probability(minor, src, dst)
+        else:
+            weight, base = self.smoothing, self.usage_share(minor, dst)
+        return (self.transitions.get((minor, src, dst), 0) + weight * base) / (total + weight)
 
     def usage_prior(self, key: Key, chord: Chord) -> float:
         return self.usage_weight * self.usage_share(key.minor, chord_token(chord, key))
@@ -152,7 +166,7 @@ def learned_from(pieces: Iterable[Piece], base: LearnedHarmony | None = None) ->
         merged_t[(bool(m), a, b)] += n
     for (m, t), beats in usage.items():
         merged_u[(bool(m), t)] += beats
-    return LearnedHarmony(transitions=dict(merged_t), usage=dict(merged_u))
+    return LearnedHarmony(transitions=dict(merged_t), usage=dict(merged_u), prior=base.prior if base else None)
 
 
 class MusicMemory:
@@ -178,14 +192,9 @@ class MusicMemory:
 
     def store(self, source: str, label: str, result: StudyResult) -> int:
         """Enregistre (ou remplace) les leçons d'une séance. Retourne son identifiant."""
+        transitions, usage = count_habits(result.pieces)
         with self._db:
-            self._db.execute("DELETE FROM recordings WHERE source = ?", (source,))
-            cur = self._db.execute(
-                "INSERT INTO recordings (source, label, studied_at, duration_s) VALUES (?, ?, ?, ?)",
-                (source, label, datetime.now().isoformat(timespec="seconds"), result.duration_s),
-            )
-            rid = int(cur.lastrowid or 0)
-            transitions, usage = count_habits(result.pieces)
+            rid = self._replace_counts(source, label, result.duration_s, transitions, usage)
             for piece in result.pieces:
                 minor = int(piece.key.minor)
                 self._db.execute(
@@ -194,14 +203,42 @@ class MusicMemory:
                     (rid, piece.start_s, piece.end_s, piece.key.tonic, minor, piece.tempo,
                      " ".join(f"{t}:{b:g}" for t, b in piece.runs)),
                 )
-            self._db.executemany(
-                "INSERT INTO transitions (recording_id, minor, from_rel, to_rel, count) VALUES (?, ?, ?, ?, ?)",
-                [(rid, m, a, b, n) for (m, a, b), n in transitions.items()],
-            )
-            self._db.executemany(
-                "INSERT INTO usage (recording_id, minor, rel, beats) VALUES (?, ?, ?, ?)",
-                [(rid, m, t, beats) for (m, t), beats in usage.items()],
-            )
+        return rid
+
+    def store_counts(
+        self,
+        source: str,
+        label: str,
+        transitions: dict[tuple[int, str, str], int],
+        usage: dict[tuple[int, str], float],
+        duration_s: float = 0.0,
+    ) -> int:
+        """Enregistre (ou remplace) des compteurs déjà faits, sans morceaux (corpus de grilles)."""
+        with self._db:
+            return self._replace_counts(source, label, duration_s, transitions, usage)
+
+    def _replace_counts(
+        self,
+        source: str,
+        label: str,
+        duration_s: float,
+        transitions: dict[tuple[int, str, str], int],
+        usage: dict[tuple[int, str], float],
+    ) -> int:
+        self._db.execute("DELETE FROM recordings WHERE source = ?", (source,))
+        cur = self._db.execute(
+            "INSERT INTO recordings (source, label, studied_at, duration_s) VALUES (?, ?, ?, ?)",
+            (source, label, datetime.now().isoformat(timespec="seconds"), duration_s),
+        )
+        rid = int(cur.lastrowid or 0)
+        self._db.executemany(
+            "INSERT INTO transitions (recording_id, minor, from_rel, to_rel, count) VALUES (?, ?, ?, ?, ?)",
+            [(rid, int(m), a, b, n) for (m, a, b), n in transitions.items()],
+        )
+        self._db.executemany(
+            "INSERT INTO usage (recording_id, minor, rel, beats) VALUES (?, ?, ?, ?)",
+            [(rid, int(m), t, beats) for (m, t), beats in usage.items()],
+        )
         return rid
 
     def piece_rows(self) -> list[tuple[str, int, int, float, float, float, str]]:
@@ -276,15 +313,24 @@ def memory_path() -> Path:
     return learning_dir() / MEMORY_FILE
 
 
-def load_learned_harmony(path: Path | None = None) -> LearnedHarmony | None:
-    """Mémoire apprise, ou None si rien n'a encore été étudié. Ne lève jamais d'exception."""
+def load_learned_harmony(path: Path | None = None, corpus: Path | None = None) -> LearnedHarmony | None:
+    """Mémoire de l'équipe, avec le corpus de grilles comme a priori s'il a été importé.
+
+    `corpus` : fichier du corpus ; par défaut celui du dossier d'apprentissage quand
+    `path` n'est pas imposé. None si rien n'a encore été appris. Ne lève jamais d'exception.
+    """
+    from orchestre_ia.learning.corpus import corpus_path, load_corpus_prior
+
     path = path or memory_path()
-    if not path.exists():
-        return None
-    try:
-        with MusicMemory(path) as memory:
-            learned = memory.learned()
-    except Exception:
-        log.exception("Lecture de la mémoire musicale impossible")
-        return None
+    if corpus is None and path == memory_path():
+        corpus = corpus_path()
+    prior = load_corpus_prior(corpus) if corpus is not None else None
+    learned = LearnedHarmony(prior=prior)
+    if path.exists():
+        try:
+            with MusicMemory(path) as memory:
+                learned = memory.learned()
+            learned.prior = prior
+        except Exception:
+            log.exception("Lecture de la mémoire musicale impossible")
     return None if learned.is_empty else learned

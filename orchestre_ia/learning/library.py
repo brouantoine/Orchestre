@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import multiprocessing
 import os
 import time
 from concurrent.futures import Future, ProcessPoolExecutor, as_completed
@@ -174,7 +175,9 @@ def study_library(
             record(i, path, source, study_song(str(path)))
         return report
 
-    pool = ProcessPoolExecutor(max_workers=workers)
+    # « spawn » partout : sous Linux, le « fork » par défaut copie un processus qui a déjà des
+    # threads (journaux, Qt, audio) et peut se bloquer indéfiniment. Windows utilise déjà spawn.
+    pool = ProcessPoolExecutor(max_workers=workers, mp_context=multiprocessing.get_context("spawn"))
     try:
         futures: dict[Future[SongOutcome], tuple[Path, str]] = {
             pool.submit(study_song, str(path)): (path, source) for path, source in todo
