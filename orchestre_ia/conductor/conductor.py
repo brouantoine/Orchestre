@@ -10,6 +10,10 @@ Boucle de décision (thread dédié, toutes les 10 ms) :
   batterie partagent exactement la même grille.
 - L'accord n'est réévalué qu'à des points choisis (temps 1 et 3 en rythmé,
   chaque temps en jeu libre, au moins 2 temps par accord) : décisions stables.
+- Grille verrouillée (jeu rythmé, `conductor.lock`) : une progression répétée deux fois
+  est rejouée en rythme, en avance sur la voix ; elle n'est lâchée que si le chant la
+  contredit nettement (changement de partie).
+- Main droite mélodique (`instruments.melody`) au-dessus des accords et de la basse.
 - La batterie n'entre qu'en jeu rythmé, en début de mesure, après 2 mesures de chant.
 - L'intensité suit le volume du chant ; l'accompagnement s'allège pendant les silences.
 """
@@ -27,9 +31,11 @@ from typing import TYPE_CHECKING
 from orchestre_ia.analysis.engine import AnalysisEngine, AnalysisSnapshot
 from orchestre_ia.analysis.theory import Chord, Key
 from orchestre_ia.conductor.harmony import HarmonyEngine
+from orchestre_ia.conductor.lock import ProgressionLock
 from orchestre_ia.core.events import Event, EventBus
 from orchestre_ia.instruments.base import PlayContext
 from orchestre_ia.instruments.drums import DrumEngine
+from orchestre_ia.instruments.melody import MelodyEngine
 from orchestre_ia.instruments.piano import PianoEngine
 from orchestre_ia.instruments.styles import DEFAULT_STYLE, STYLES, Style
 from orchestre_ia.synthesis.output import AudioOutputEngine
@@ -60,6 +66,7 @@ class AccompanimentSettings:
     tempo_confidence_threshold: float = 0.5
     silence_bars_to_end: float = 2.0
     free_silence_to_end_s: float = 6.0
+    melody: bool = True  # main droite mélodique au-dessus des accords
 
     @property
     def style_obj(self) -> Style:
@@ -83,6 +90,7 @@ class ConductorUpdate(Event):
     beat_in_bar: int
     piano_notes: tuple[int, ...] = field(default=())
     chord_pcs: tuple[int, ...] = field(default=())
+    progression_locked: bool = False
 
 
 class Conductor:
@@ -102,6 +110,8 @@ class Conductor:
         self.lookahead_s = lookahead_s
         self.harmony = HarmonyEngine(learned=learned)
         self.piano = PianoEngine()
+        self.melody = MelodyEngine()
+        self.lock = ProgressionLock()
         self.drums = DrumEngine()
         self.state = ConductorState.IDLE
         self._thread: threading.Thread | None = None
@@ -123,6 +133,8 @@ class Conductor:
         self._sung_at_listen = 0.0
         self._end_beat: int | None = None
         self.harmony.reset()
+        self.melody.reset()
+        self.lock.reset()
 
     # ------------------------------------------------------------ contrôle
     def start(self) -> None:
@@ -246,6 +258,7 @@ class Conductor:
             self.output.silence()
             self.piano.release_all(0)
             self._drums_on = False
+            self.lock.unlock()
             self._apply_mode(rhythmic, bpm, source, snap)
 
     def _update_intensity(self, snap: AnalysisSnapshot, now: float) -> None:
@@ -279,10 +292,28 @@ class Conductor:
             self._conclude(beat, key)
             return
 
-        # harmonie : points de décision stables
+        # harmonie : grille verrouillée, sinon points de décision stables
         changed = False
         can_change = (beat_in_bar in (0, 2)) if self.rhythmic else True
-        if self.chord is None or (can_change and beat - self._chord_since_beat >= 2):
+        expected = self.lock.expected(beat) if self.rhythmic and self.chord is not None else None
+        if expected is not None:
+            if can_change and silent_for < 0.4:
+                # les notes chantées récemment accompagnaient l'accord prévu au temps précédent
+                heard = self.lock.expected(beat - 1) or expected
+                evidence = self.analysis.evidence(now - 2.5 * max(beat_s, 0.6), now, half_life_s=max(beat_s, 0.6))
+                if evidence.sum() >= self.harmony.min_evidence and self.lock.check(
+                    self.harmony.fit(heard, evidence, key), self.harmony.best_fit(evidence, key)
+                ):
+                    expected = None  # le chant change : on se remet à le suivre dès ce temps
+            if expected is not None and (expected.root, expected.triad_quality) != (
+                self.chord.root, self.chord.triad_quality
+            ):
+                self.chord = self.harmony.follow(expected, key)
+                self.alternatives = ()
+                self._chord_since_beat = beat
+                changed = True
+        if expected is None and (self.chord is None or (can_change and beat - self._chord_since_beat >= 2)):
+            # (essai du 2026-11-27 : une fenêtre de 2 temps ajoutait des accords parasites à mi-mesure)
             evidence = self.analysis.evidence(now - 2.5 * max(beat_s, 0.6), now, half_life_s=max(beat_s, 0.6))
             # La meilleure hypothèse de tonalité guide l'harmonie dès qu'elle existe,
             # même peu sûre : elle se trompe rarement de beaucoup (relative/homonyme).
@@ -292,6 +323,8 @@ class Conductor:
                 self.chord = decision.chord
                 self.alternatives = tuple(c for c, _ in decision.alternatives)
                 self._chord_since_beat = beat
+                if self.rhythmic:
+                    self.lock.observe(self.chord, beat)
             elif decision is None and self.chord is None:
                 return  # pas encore assez d'indices : on attend le temps suivant
 
@@ -310,8 +343,11 @@ class Conductor:
             rhythmic=self.rhythmic,
             fill=self.rhythmic and bar % 4 == 3,
             phrase_start=self.rhythmic and bar % 4 == 0,
+            singing=silent_for < 0.4,
         )
         notes, offs = self.piano.play_beat(ctx)
+        if self.settings.melody:
+            notes += self.melody.play_beat(ctx)[0]
         if self._drums_on:
             drum_notes, _ = self.drums.play_beat(ctx)
             notes += drum_notes
@@ -362,6 +398,8 @@ class Conductor:
         self._end_beat = beat
         self.chord = final
         self.harmony.reset()
+        self.lock.reset()
+        self.melody.reset()
         self._set_state(ConductorState.ENDING)
 
     # ---------------------------------------------------------- publication
@@ -384,5 +422,6 @@ class Conductor:
                 beat_in_bar=beat_in_bar,
                 piano_notes=tuple(self.piano.last_played) if self.state == ConductorState.PLAYING else (),
                 chord_pcs=self.chord.pcs if self.chord else (),
+                progression_locked=self.lock.locked,
             )
         )

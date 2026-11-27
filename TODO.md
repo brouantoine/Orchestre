@@ -30,8 +30,13 @@
 - [x] Mémoire sur les 2 derniers accords : louange 41 → 46 % d'accords suivants devinés (2026-11-26).
 - [x] Mémoire du chant en cours (grilles déjà jouées) : louange 48 → 72 %, pop 41 → 75 % (2026-11-26).
 - [ ] Écouter l'effet de la mémoire du chant en direct : risque qu'une erreur de l'orchestre s'auto-entretienne.
-- [ ] Anticiper le moment du changement : jouer l'accord attendu au temps 1 pendant une respiration du chanteur
-      quand la mémoire du chant est sûre (aujourd'hui l'accord est gardé faute de notes chantées).
+- [x] Verrouillage de grille (jeu rythmé) : progression rejouée en rythme et en avance, lâchée quand le chant
+      change, reprise quand elle revient (2026-11-27).
+- [x] Main droite mélodique : motifs, réponses pendant les respirations, relances de fin de phrase (2026-11-27).
+- [ ] Juger à l'oreille la main droite et la grille sur de vrais chants (démo : enregistrements/demo_grille_et_main_droite.wav).
+- [ ] Reconnaissance : confusion tonalité relative (Do majeur lu La mineur) et accords à mi-mesure sur une mélodie
+      ambiguë (démo du 2026-11-27) ; la grille verrouillée hérite de ces erreurs.
+- [ ] Grille en jeu libre (sans tempo) : aujourd'hui seulement en jeu rythmé ; taper le tempo.
 - [ ] Mélodie → accords : OpenEWLD (lead sheets du domaine public), PDMX sans conflit de licence (≈ 223 000
       partitions CC0), Open Hymnal (cantiques du domaine public, ABC) ; Hooktheory : licence à vérifier.
 - [ ] Batterie : E-GMD / Groove MIDI (Magenta, CC BY 4.0, 444 h de vrais batteurs).

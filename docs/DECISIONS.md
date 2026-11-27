@@ -136,3 +136,22 @@ Sans effet fonctionnel. L'avertissement est filtré dans les tests. À surveille
   s'entretenir. Les notes chantées gardent le dernier mot (le bonus reste ≤ 0,25 face à l'adéquation au chant).
   À juger à l'oreille.
 - Évaluation : les « règles génériques » n'ont aucune mémoire ; « appris + chant en cours » = ce que joue l'application.
+
+## D16 — Main droite mélodique et verrouillage de grille (2026-11-27)
+- Demande de l'utilisateur après un essai : « je n'entends que les accords » et « une fois la progression trouvée,
+  il doit maintenir la cadence et ne s'adapter que si le chant change ». L'essai était en jeu libre (tempo non
+  détecté) : le piano n'y tient que des accords arpégés.
+- Main droite (`instruments/melody.py`, canal MIDI 2, curseur de volume) : registre Do5–Sol6 au-dessus de la voix,
+  un motif par phrase de 4 mesures (pas de gamme autour d'une note de l'accord, temps forts sur l'accord), varié
+  d'une phrase à l'autre ; discrète pendant le chant (réponse en fin de mesure, une mesure sur deux), motif entier
+  et relance descendante pendant les respirations ; cellules rythmiques par style. Jeu libre : ornement au changement.
+- Grille (`conductor/lock.py`, jeu rythmé seulement) : verrouillée quand une suite de 2 à 8 accords revient avec les
+  mêmes durées (dès le dernier accord du 2e tour) ; vérifiée à chaque point de décision chanté sur l'adéquation au
+  chant seule (sans bonus de contexte, qui favoriseraient l'accord prévu), en comparant à l'accord prévu au temps
+  précédent (les notes entendues l'accompagnaient) ; lâchée après 2 contradictions (écart > 0,3) ; reprise après
+  2 accords reconnus si elle revient ; oubliée si lâchée avant 4 vérifications réussies (erreur d'écoute).
+- Recalage : un changement chanté est entendu au point de décision suivant (2 temps plus tard, mesuré sur la démo) ;
+  la grille verrouillée est avancée de 2 temps quand les changements repérés sont réguliers.
+- Essai rejeté : écouter seulement les 2 derniers temps (au lieu de 2,5 lissés) ajoutait des accords à mi-mesure.
+- Démo synthétique (refrain ×3, pont ×2, refrain ×3) : grille verrouillée au 3e tour, lâchée au début du pont.
+  La reconnaissance lit cette mélodie en La mineur et la grille retenue en hérite : à juger sur de vrais chants.

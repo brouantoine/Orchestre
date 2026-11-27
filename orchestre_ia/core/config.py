@@ -55,6 +55,7 @@ class AccompanimentConfig:
     master_volume: float = 0.8
     piano_volume: float = 0.8
     bass_volume: float = 0.8
+    melody_volume: float = 0.6
     drums_volume: float = 0.7
     output_device_name: str | None = None
     output_hostapi: str | None = None
@@ -69,7 +70,7 @@ class AccompanimentConfig:
         if self.tempo_mode not in TEMPO_MODES:
             self.tempo_mode = "auto"
         self.manual_bpm = float(min(200.0, max(40.0, self.manual_bpm)))
-        for name in ("master_volume", "piano_volume", "bass_volume", "drums_volume"):
+        for name in ("master_volume", "piano_volume", "bass_volume", "melody_volume", "drums_volume"):
             setattr(self, name, float(min(1.0, max(0.0, getattr(self, name)))))
 
 

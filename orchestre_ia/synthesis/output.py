@@ -22,7 +22,14 @@ import sounddevice as sd
 
 from orchestre_ia.conductor.clock import MusicClock
 from orchestre_ia.core.events import Event, EventBus
-from orchestre_ia.midi.events import BASS_CHANNEL, DRUM_CHANNEL, PIANO_CHANNEL, MidiScheduler, ScheduledMessage
+from orchestre_ia.midi.events import (
+    BASS_CHANNEL,
+    DRUM_CHANNEL,
+    MELODY_CHANNEL,
+    PIANO_CHANNEL,
+    MidiScheduler,
+    ScheduledMessage,
+)
 from orchestre_ia.synthesis.backend import PROGRAM_ACOUSTIC_GRAND, SynthBackend
 from orchestre_ia.synthesis.builtin import BuiltinSynth
 
@@ -73,7 +80,7 @@ class AudioOutputEngine:
         self.callback_errors = 0
         self.latency_ms = 0.0
         self.tuning_cents = 0.0
-        self._channel_volumes = {PIANO_CHANNEL: 100, BASS_CHANNEL: 100, DRUM_CHANNEL: 100}
+        self._channel_volumes = {PIANO_CHANNEL: 100, BASS_CHANNEL: 100, MELODY_CHANNEL: 90, DRUM_CHANNEL: 100}
         # niveau de sortie récent (instant de sortie au haut-parleur, dBFS) pour estimer la réécoute
         self._levels: deque[tuple[float, float]] = deque(maxlen=1200)
         self._levels_lock = threading.Lock()
@@ -88,6 +95,7 @@ class AudioOutputEngine:
             backend = self._backend_factory(samplerate)
             backend.program(PIANO_CHANNEL, PROGRAM_ACOUSTIC_GRAND)
             backend.program(BASS_CHANNEL, PROGRAM_ACOUSTIC_GRAND)
+            backend.program(MELODY_CHANNEL, PROGRAM_ACOUSTIC_GRAND)
             backend.program(DRUM_CHANNEL, 0, drums=True)
             for ch, vol in self._channel_volumes.items():
                 backend.cc(ch, 7, vol)
@@ -152,11 +160,11 @@ class AudioOutputEngine:
             backend.cc(channel, 7, midi_value)
 
     def set_tuning(self, cents: float) -> None:
-        """Accorde piano et basse sur le chanteur (la batterie n'est pas concernée)."""
+        """Accorde les deux mains du piano sur le chanteur (la batterie n'est pas concernée)."""
         self.tuning_cents = float(cents)
         backend = self.backend
         if backend is not None:
-            for ch in (PIANO_CHANNEL, BASS_CHANNEL):
+            for ch in (PIANO_CHANNEL, BASS_CHANNEL, MELODY_CHANNEL):
                 backend.tune(ch, cents)
 
     def silence(self) -> None:

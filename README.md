@@ -91,6 +91,12 @@ sont assez nombreuses. L'import affiche la part d'accords suivants devinés sur 
 Pendant un chant, l'orchestre retient aussi les grilles déjà jouées (couplet, refrain, boucle) pour
 attendre le bon accord suivant ; il oublie tout à la fin du chant.
 
+En jeu rythmé (tempo détecté, réglé ou tapé), une grille chantée deux fois est **verrouillée** :
+l'orchestre la rejoue en rythme, en même temps que le chanteur, et ne la lâche que si le chant la
+contredit nettement (changement de partie). La **main droite** du piano joue des motifs au-dessus
+des accords : discrète pendant le chant, plus présente pendant les respirations (curseur « Piano ·
+mélodie » dans Orchestre, 0 pour la couper).
+
 FluidSynth (DLL) est dans `vendor\fluidsynth\` et la banque de sons dans `orchestre_ia\resources\soundfonts\`.
 
 ## Tests

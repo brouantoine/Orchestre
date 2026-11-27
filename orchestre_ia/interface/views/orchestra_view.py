@@ -25,7 +25,7 @@ from orchestre_ia.core.config import AppConfig
 from orchestre_ia.interface import theme
 from orchestre_ia.interface.icons import icon
 from orchestre_ia.interface.views.common import icon_label, make_card, page, scrollable, view_title
-from orchestre_ia.midi.events import BASS_CHANNEL, DRUM_CHANNEL, PIANO_CHANNEL
+from orchestre_ia.midi.events import BASS_CHANNEL, DRUM_CHANNEL, MELODY_CHANNEL, PIANO_CHANNEL
 
 DRUM_MODE_LABELS = {"auto": "Automatique (entre quand la pulsation est stable)", "on": "Toujours (dès le jeu rythmé)", "off": "Jamais"}
 
@@ -49,8 +49,10 @@ class OrchestraView(QWidget):
         form.setVerticalSpacing(14)
         self.sliders: dict[str, QSlider] = {}
         self.volume_labels: dict[str, QLabel] = {}
-        for key, label, icon_name in (("master_volume", "Général", "level"), ("piano_volume", "Piano · main droite", "piano"),
-                                      ("bass_volume", "Piano · main gauche", "piano"), ("drums_volume", "Batterie", "drums")):
+        for key, label, icon_name in (("master_volume", "Général", "level"), ("piano_volume", "Piano · accords", "piano"),
+                                      ("bass_volume", "Piano · basse (main gauche)", "piano"),
+                                      ("melody_volume", "Piano · mélodie (main droite)", "piano"),
+                                      ("drums_volume", "Batterie", "drums")):
             slider = QSlider(Qt.Orientation.Horizontal)
             slider.setRange(0, 100)
             slider.setValue(round(getattr(acc, key) * 100))
@@ -146,7 +148,8 @@ class OrchestraView(QWidget):
         if key == "master_volume":
             out.set_master_volume(value)
         else:
-            channel = {"piano_volume": PIANO_CHANNEL, "bass_volume": BASS_CHANNEL, "drums_volume": DRUM_CHANNEL}[key]
+            channel = {"piano_volume": PIANO_CHANNEL, "bass_volume": BASS_CHANNEL,
+                       "melody_volume": MELODY_CHANNEL, "drums_volume": DRUM_CHANNEL}[key]
             out.set_channel_volume(channel, value)
 
     def _on_volume(self, key: str, value: int) -> None:

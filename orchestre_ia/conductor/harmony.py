@@ -110,7 +110,13 @@ class HarmonyEngine:
         return Chord(chord.root, chord.quality, 0)
 
     def score(self, chord: Chord, evidence: np.ndarray, key: Key | None, key_confidence: float) -> float:
+        return self.fit(chord, evidence, key) + self.context(chord, key, key_confidence)
+
+    def fit(self, chord: Chord, evidence: np.ndarray, key: Key | None) -> float:
+        """Adéquation de l'accord aux notes chantées seules (-0,6 à 1), sans aucun contexte."""
         total = evidence.sum()
+        if total <= 0:
+            return 0.0
         fit = 0.0
         pcs = chord.pcs
         for pc in range(12):
@@ -125,7 +131,19 @@ class HarmonyEngine:
                 fit -= 0.25 * w  # note de passage dans la gamme : légère pénalité
             else:
                 fit -= 0.6 * w
-        return fit / total + self.context(chord, key, key_confidence)
+        return fit / total
+
+    def best_fit(self, evidence: np.ndarray, key: Key | None) -> float:
+        return max(self.fit(c, evidence, key) for c in ALL_TRIADS)
+
+    def follow(self, chord: Chord, key: Key | None) -> Chord:
+        """Accord imposé par la grille verrouillée : l'état et la mémoire du chant le suivent."""
+        chord = self._with_degree(chord, key)
+        if self.current is not None and not _same_triad(chord, self.current):
+            self.previous = self.current
+        self.current = chord
+        self.remember(chord)
+        return chord
 
     def context(self, chord: Chord, key: Key | None, key_confidence: float) -> float:
         """Part du score indépendante du chant : tonalité, habitudes apprises, enchaînement."""

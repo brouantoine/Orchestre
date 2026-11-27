@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 
 PIANO_CHANNEL = 0
 BASS_CHANNEL = 1  # main gauche du piano sur un canal séparé (volume indépendant)
+MELODY_CHANNEL = 2  # main droite mélodique du piano (motifs, réponses, relances)
 DRUM_CHANNEL = 9  # canal 10 en numérotation General MIDI
 
 

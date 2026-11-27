@@ -23,6 +23,7 @@ class PlayContext:
     rhythmic: bool  # False = jeu libre (tempo non établi)
     fill: bool = False  # dernier temps d'une phrase : relance
     phrase_start: bool = False
+    singing: bool = True  # le chanteur chante en ce moment (sinon : respiration, silence)
 
 
 @dataclass(frozen=True)
