@@ -86,6 +86,10 @@ Aucun son : seules les suites d'accords sont lues, ramenées à la tonalité et 
 (louange, afro, pop, rock…) dans `apprentissage\corpus.sqlite`. Le corpus remplace les règles
 génériques ; les habitudes de l'équipe (`--learn-listen`, `--learn-study`) l'emportent dès qu'elles
 sont assez nombreuses. L'import affiche la part d'accords suivants devinés sur des chants tenus à part.
+`verifier_corpus.bat` importe le corpus puis remesure les séances de louange déjà écoutées.
+
+Pendant un chant, l'orchestre retient aussi les grilles déjà jouées (couplet, refrain, boucle) pour
+attendre le bon accord suivant ; il oublie tout à la fin du chant.
 
 FluidSynth (DLL) est dans `vendor\fluidsynth\` et la banque de sons dans `orchestre_ia\resources\soundfonts\`.
 

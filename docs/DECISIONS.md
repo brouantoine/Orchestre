@@ -122,3 +122,17 @@ Sans effet fonctionnel. L'avertissement est filtré dans les tests. À surveille
   louange 35 % / 81 % (règles génériques) → 41 % / 83 % (corpus) ; pop 31 % / 73 % → 35 % / 78 %.
   Le moteur atteint déjà le plafond d'une mémoire à un accord (40 %) ; avec les deux derniers accords : 47 %.
 - Lakh MIDI (CC-BY 4.0) contient des œuvres protégées : réservé à un usage interne si on l'ajoute.
+
+## D15 — Deux derniers accords et mémoire du chant en cours (2026-11-26)
+- Contexte à deux accords (table `contexts`) : P(suivant | avant-dernier, actuel), lissée vers l'enchaînement
+  simple. Avec le corpus, seule la part du corpus est remplacée par sa version en contexte : les comptes de
+  l'équipe ne sont jamais réduits (une première formule multiplicative effaçait une habitude d'équipe que le
+  corpus jugeait rare dans ce contexte ; un test le vérifie).
+- Mémoire du chant en cours (`HarmonyEngine.remember`), indépendante de la tonalité, oubliée à `reset()` :
+  interpolation à deux niveaux (accord actuel, deux derniers accords), poids n / (n + 1) après n observations.
+- Mesure, accord suivant 1er choix sur chants tenus à part : louange 36 % (règles) → 41 % (corpus) → 46 %
+  (deux accords) → 72 % (chant en cours, mesure séparée sur 60 000 chants) ; parmi 3 : 95 %.
+- Limite : en direct, la mémoire du chant retient les choix de l'orchestre, pas la vérité ; une erreur peut
+  s'entretenir. Les notes chantées gardent le dernier mot (le bonus reste ≤ 0,25 face à l'adéquation au chant).
+  À juger à l'oreille.
+- Évaluation : les « règles génériques » n'ont aucune mémoire ; « appris + chant en cours » = ce que joue l'application.

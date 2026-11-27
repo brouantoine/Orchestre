@@ -27,10 +27,16 @@
 - [x] Mesure : accord suivant deviné, règles génériques contre habitudes apprises (morceaux tenus à part).
 - [x] Bibliothèque de chants : `--learn-library`, `etudier_chants.bat`, mp3/m4a/webm via PyAV, parallèle, reprise.
 - [x] Corpus de grilles Chordonomicon (≈ 680 000 chants, MIT) : `--learn-corpus`, a priori de la mémoire (2026-11-24).
-- [ ] Mémoire sur les 2 derniers accords (trigrammes) : 47 % d'accords suivants devinés en louange
-      contre 40 % avec le seul accord en cours (mesure du 2026-11-24 sur 50 000 chants).
+- [x] Mémoire sur les 2 derniers accords : louange 41 → 46 % d'accords suivants devinés (2026-11-26).
+- [x] Mémoire du chant en cours (grilles déjà jouées) : louange 48 → 72 %, pop 41 → 75 % (2026-11-26).
+- [ ] Écouter l'effet de la mémoire du chant en direct : risque qu'une erreur de l'orchestre s'auto-entretienne.
+- [ ] Anticiper le moment du changement : jouer l'accord attendu au temps 1 pendant une respiration du chanteur
+      quand la mémoire du chant est sûre (aujourd'hui l'accord est gardé faute de notes chantées).
+- [ ] Mélodie → accords : OpenEWLD (lead sheets du domaine public), PDMX sans conflit de licence (≈ 223 000
+      partitions CC0), Open Hymnal (cantiques du domaine public, ABC) ; Hooktheory : licence à vérifier.
+- [ ] Batterie : E-GMD / Groove MIDI (Magenta, CC BY 4.0, 444 h de vrais batteurs).
 - [ ] Tonalité par section dans le corpus (modulations de fin de chant, aujourd'hui une tonalité par chant).
-- [ ] Mesurer corpus + habitudes de l'équipe sur les vraies séances de louange (`--learn-study --force`).
+- [ ] Mesurer corpus + habitudes de l'équipe sur les vraies séances de louange : double-cliquer `verifier_corpus.bat`.
 - [ ] Lakh MIDI (CC-BY 4.0, usage interne) : rythmes de batterie, voicings de piano, mélodie → accords.
 - [ ] Déposer des centaines de chants (sources autorisées) dans Musique\Orchestre chants et lancer l'étude.
 - [ ] Phase 6 avec cette bibliothèque : garder la grille de chaque chant et la mélodie chantée, reconnaître

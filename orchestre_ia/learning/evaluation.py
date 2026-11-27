@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 from orchestre_ia.analysis.theory import Chord, Key
 from orchestre_ia.conductor.harmony import HarmonyEngine
-from orchestre_ia.learning.memory import LearnedHarmony, MusicMemory, learned_from
+from orchestre_ia.learning.memory import LearnedHarmony, MusicMemory, changes, learned_from
 from orchestre_ia.learning.study import Piece
 
 
@@ -38,22 +38,26 @@ def _same(a: Chord, b: Chord) -> bool:
 
 class _Tally:
     def __init__(self) -> None:
-        self.generic = HarmonyEngine()
+        self.generic = HarmonyEngine(song_memory=False)  # référence : aucune mémoire
         self.changes = 0
         self.hits = {"g1": 0, "g3": 0, "l1": 0, "l3": 0}
 
     def judge(self, pieces: list[Piece], learned: LearnedHarmony) -> None:
         engine = HarmonyEngine(learned=learned)
         for piece in pieces:
-            for (a, _), (b, _) in zip(piece.runs, piece.runs[1:]):
-                if a == b:
-                    continue
-                current, actual = token_chord(a, piece.key), token_chord(b, piece.key)
+            tokens = changes(piece.runs)
+            engine.reset()  # nouveau morceau : la mémoire du chant repart de zéro
+            if tokens:
+                engine.remember(token_chord(tokens[0], piece.key))
+            for i in range(1, len(tokens)):
+                current, actual = token_chord(tokens[i - 1], piece.key), token_chord(tokens[i], piece.key)
+                previous = token_chord(tokens[i - 2], piece.key) if i >= 2 else None
                 self.changes += 1
                 for name, candidate in (("g", self.generic), ("l", engine)):
-                    guesses = candidate.predict_next(piece.key, current, top=3)
+                    guesses = candidate.predict_next(piece.key, current, top=3, previous=previous)
                     self.hits[f"{name}1"] += _same(guesses[0], actual)
                     self.hits[f"{name}3"] += any(_same(g, actual) for g in guesses)
+                engine.remember(actual)  # l'accord réellement joué entre dans la mémoire du chant
 
     def score(self) -> PredictionScore | None:
         if not self.changes:

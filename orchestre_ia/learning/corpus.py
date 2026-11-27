@@ -31,7 +31,7 @@ from typing import Callable, Iterator
 import numpy as np
 
 from orchestre_ia.analysis.theory import Key
-from orchestre_ia.learning.memory import LearnedHarmony, MusicMemory, count_habits, rel_token
+from orchestre_ia.learning.memory import LearnedHarmony, MusicMemory, count_contexts, count_habits, rel_token
 from orchestre_ia.learning.study import FUNCTION, Piece, key_of
 
 log = logging.getLogger(__name__)
@@ -147,6 +147,7 @@ class GroupCounts:
     songs: int = 0
     transitions: dict[tuple[int, str, str], int] = field(default_factory=lambda: defaultdict(int))
     usage: dict[tuple[int, str], float] = field(default_factory=lambda: defaultdict(float))
+    contexts: dict[tuple[int, str, str, str], int] = field(default_factory=lambda: defaultdict(int))
 
     def add(self, pieces: list[Piece]) -> None:
         transitions, usage = count_habits(pieces)
@@ -154,22 +155,31 @@ class GroupCounts:
             self.transitions[k] += n
         for k, beats in usage.items():
             self.usage[k] += beats
+        for k, n in count_contexts(pieces).items():
+            self.contexts[k] += n
         self.songs += 1
+
+    def absorb(self, other: GroupCounts) -> None:
+        self.songs += other.songs
+        for k, n in other.transitions.items():
+            self.transitions[k] += n
+        for k, beats in other.usage.items():
+            self.usage[k] += beats
+        for k, n in other.contexts.items():
+            self.contexts[k] += n
 
     def learned(self) -> LearnedHarmony:
         return LearnedHarmony(
             transitions={(bool(m), a, b): n for (m, a, b), n in self.transitions.items()},
             usage={(bool(m), t): beats for (m, t), beats in self.usage.items()},
+            contexts={(bool(m), p, a, b): n for (m, p, a, b), n in self.contexts.items()},
         )
 
 
 def merged(groups: list[GroupCounts]) -> LearnedHarmony:
     total = GroupCounts()
     for g in groups:
-        for k, n in g.transitions.items():
-            total.transitions[k] += n
-        for k, beats in g.usage.items():
-            total.usage[k] += beats
+        total.absorb(g)
     return total.learned()
 
 
@@ -189,13 +199,8 @@ class CorpusImport:
         for name in set(self.train) | set(self.held_out_counts):
             g = GroupCounts()
             for part in (self.train.get(name), self.held_out_counts.get(name)):
-                if part is None:
-                    continue
-                g.songs += part.songs
-                for k, n in part.transitions.items():
-                    g.transitions[k] += n
-                for k, beats in part.usage.items():
-                    g.usage[k] += beats
+                if part is not None:
+                    g.absorb(part)
             result[name] = g
         return result
 
@@ -240,7 +245,7 @@ def store_corpus(memory: MusicMemory, counts: dict[str, GroupCounts]) -> None:
     """Remplace le contenu Chordonomicon du corpus (un enregistrement par groupe)."""
     for name, g in sorted(counts.items()):
         memory.store_counts(
-            f"{SOURCE_PREFIX}{name}", f"{name} ({g.songs} chants)", dict(g.transitions), dict(g.usage)
+            f"{SOURCE_PREFIX}{name}", f"{name} ({g.songs} chants)", dict(g.transitions), dict(g.usage), dict(g.contexts)
         )
 
 

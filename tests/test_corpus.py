@@ -145,5 +145,5 @@ def test_learn_corpus_command(tmp_path, capsys):
     rows = [(i, WORSHIP, "'worship'", "") for i in range(1, 41)]
     assert main(["--learn-corpus", str(write_csv(tmp_path / "c.csv", rows))]) == 0
     out = capsys.readouterr().out
-    assert "louange" in out and "avec le corpus" in out
+    assert "louange" in out and "corpus + chant en cours" in out
     assert corpus.load_corpus_prior() is not None

@@ -398,8 +398,8 @@ def run_learning_study(target: str | None, force: bool) -> int:
                 print(f"      accords : {' '.join(names[:12])}{' …' if len(names) > 12 else ''}")
             if score is not None:
                 print(f"  Accord suivant deviné sur {score.changes} changements (1er choix / parmi 3) :")
-                print(f"      règles génériques   : {score.generic_top1 * 100:3.0f} % / {score.generic_top3 * 100:3.0f} %")
-                print(f"      habitudes apprises  : {score.learned_top1 * 100:3.0f} % / {score.learned_top3 * 100:3.0f} %")
+                print(f"      règles génériques       : {score.generic_top1 * 100:3.0f} % / {score.generic_top3 * 100:3.0f} %")
+                print(f"      appris + chant en cours : {score.learned_top1 * 100:3.0f} % / {score.learned_top3 * 100:3.0f} %")
         print("\n--- Ce que l'orchestre a appris ---")
         for line in memory.summary_lines():
             print(f"  {line}")
@@ -463,7 +463,7 @@ def run_learning_corpus(csv_file: str | None, limit: int | None) -> int:
             continue
         print(f"  {group:<8} ({len(held)} chants, {score.changes} changements) : "
               f"règles génériques {score.generic_top1 * 100:3.0f} % / {score.generic_top3 * 100:3.0f} %, "
-              f"avec le corpus {score.learned_top1 * 100:3.0f} % / {score.learned_top3 * 100:3.0f} %")
+              f"corpus + chant en cours {score.learned_top1 * 100:3.0f} % / {score.learned_top3 * 100:3.0f} %")
 
     with MusicMemory(corpus.corpus_path()) as memory:
         corpus.store_corpus(memory, counts)
@@ -529,8 +529,8 @@ def run_learning_library(folder: str | None, workers: int | None, force: bool) -
         score = evaluate_folds(pieces_by_source(memory))
         if score is not None:
             print(f"  Accord suivant deviné sur des chants mis à part ({score.changes} changements, 1er choix / parmi 3) :")
-            print(f"      règles génériques   : {score.generic_top1 * 100:3.0f} % / {score.generic_top3 * 100:3.0f} %")
-            print(f"      habitudes apprises  : {score.learned_top1 * 100:3.0f} % / {score.learned_top3 * 100:3.0f} %")
+            print(f"      règles génériques       : {score.generic_top1 * 100:3.0f} % / {score.generic_top3 * 100:3.0f} %")
+            print(f"      appris + chant en cours : {score.learned_top1 * 100:3.0f} % / {score.learned_top3 * 100:3.0f} %")
         print("\n--- Ce que l'orchestre a appris ---")
         for line in memory.summary_lines():
             print(f"  {line}")

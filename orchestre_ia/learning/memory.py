@@ -53,6 +53,15 @@ CREATE TABLE IF NOT EXISTS transitions (
     count INTEGER NOT NULL,
     PRIMARY KEY (recording_id, minor, from_rel, to_rel)
 );
+CREATE TABLE IF NOT EXISTS contexts (
+    recording_id INTEGER NOT NULL REFERENCES recordings(id) ON DELETE CASCADE,
+    minor INTEGER NOT NULL,
+    prev_rel TEXT NOT NULL,
+    from_rel TEXT NOT NULL,
+    to_rel TEXT NOT NULL,
+    count INTEGER NOT NULL,
+    PRIMARY KEY (recording_id, minor, prev_rel, from_rel, to_rel)
+);
 CREATE TABLE IF NOT EXISTS usage (
     recording_id INTEGER NOT NULL REFERENCES recordings(id) ON DELETE CASCADE,
     minor INTEGER NOT NULL,
@@ -98,8 +107,15 @@ class LearnedHarmony:
     # `prior_weight` = nombre de changements d'accord (ou de temps) qu'il « vaut » face à l'équipe.
     prior: LearnedHarmony | None = None
     prior_weight: float = 30.0
+    # Enchaînements selon les deux derniers accords : (mineur, avant-dernier, actuel, suivant) -> nombre.
+    # Mesure du 2026-11-24 (louange, 50 000 chants) : 47 % d'accords suivants devinés contre 40 %.
+    contexts: dict[tuple[bool, str, str, str], int] = field(default_factory=dict)
+    context_backoff: float = 5.0  # sans corpus : poids de l'enchaînement simple face au contexte
 
     def __post_init__(self) -> None:
+        self._context_totals: dict[tuple[bool, str, str], int] = defaultdict(int)
+        for (minor, prev, src, _dst), n in self.contexts.items():
+            self._context_totals[(minor, prev, src)] += n
         self._from_totals: dict[tuple[bool, str], int] = defaultdict(int)
         self._mode_transitions: dict[bool, int] = defaultdict(int)
         for (minor, src, _dst), n in self.transitions.items():
@@ -111,7 +127,7 @@ class LearnedHarmony:
 
     @property
     def is_empty(self) -> bool:
-        own_empty = not self.transitions and not self.usage
+        own_empty = not self.transitions and not self.usage and not self.contexts
         return own_empty and (self.prior is None or self.prior.is_empty)
 
     def reliability(self, minor: bool) -> float:
@@ -126,20 +142,39 @@ class LearnedHarmony:
             return (own + weight * self.prior.usage_share(minor, token)) / (total + weight)
         return own / total if total > 0 else 0.0
 
-    def transition_probability(self, minor: bool, src: str, dst: str) -> float:
-        """P(dst | src), lissée vers l'a priori du corpus s'il existe, sinon vers la fréquence d'usage de dst."""
+    def transition_probability(self, minor: bool, src: str, dst: str, prev: str | None = None) -> float:
+        """P(dst | src) — ou P(dst | prev, src) si l'avant-dernier accord est connu.
+
+        Enchaînement simple : lissé vers l'a priori du corpus s'il existe, sinon vers la
+        fréquence d'usage de dst. Avec contexte : les comptes « prev → src → dst » de l'équipe
+        sont lissés vers son enchaînement simple, dans lequel la part du corpus est remplacée
+        par ce que le corpus fait dans ce contexte. Les comptes de l'équipe n'y sont jamais
+        réduits : une habitude de l'équipe que le corpus juge rare dans ce contexte reste jouée.
+        """
         total = self._from_totals.get((minor, src), 0)
+        own = self.transitions.get((minor, src, dst), 0)
         if self.prior is not None:
             weight, base = self.prior_weight, self.prior.transition_probability(minor, src, dst)
         else:
             weight, base = self.smoothing, self.usage_share(minor, dst)
-        return (self.transitions.get((minor, src, dst), 0) + weight * base) / (total + weight)
+        simple = (own + weight * base) / (total + weight)
+        if prev is None or prev == src:
+            return simple
+        if self.prior is not None:
+            prior_context = self.prior.transition_probability(minor, src, dst, prev)
+            weight = self.prior_weight
+            target = (own + weight * prior_context) / (total + weight)
+        else:
+            target, weight = simple, self.context_backoff
+        n = self.contexts.get((minor, prev, src, dst), 0)
+        return (n + weight * target) / (self._context_totals.get((minor, prev, src), 0) + weight)
 
     def usage_prior(self, key: Key, chord: Chord) -> float:
         return self.usage_weight * self.usage_share(key.minor, chord_token(chord, key))
 
-    def transition_bonus(self, key: Key, current: Chord, chord: Chord) -> float:
-        p = self.transition_probability(key.minor, chord_token(current, key), chord_token(chord, key))
+    def transition_bonus(self, key: Key, current: Chord, chord: Chord, previous: Chord | None = None) -> float:
+        prev = chord_token(previous, key) if previous is not None else None
+        p = self.transition_probability(key.minor, chord_token(current, key), chord_token(chord, key), prev)
         return self.transition_weight * p
 
 
@@ -157,16 +192,41 @@ def count_habits(pieces: Iterable[Piece]) -> tuple[dict[tuple[int, str, str], in
     return transitions, usage
 
 
+def changes(runs: Iterable[tuple[str, float]]) -> list[str]:
+    """Suite des accords joués, répétitions consécutives fusionnées."""
+    tokens: list[str] = []
+    for token, _ in runs:
+        if not tokens or tokens[-1] != token:
+            tokens.append(token)
+    return tokens
+
+
+def count_contexts(pieces: Iterable[Piece]) -> dict[tuple[int, str, str, str], int]:
+    """Compteurs « avant-dernier → actuel → suivant » (changements d'accord uniquement)."""
+    contexts: dict[tuple[int, str, str, str], int] = defaultdict(int)
+    for piece in pieces:
+        minor = int(piece.key.minor)
+        tokens = changes(piece.runs)
+        for prev, src, dst in zip(tokens, tokens[1:], tokens[2:]):
+            contexts[(minor, prev, src, dst)] += 1
+    return contexts
+
+
 def learned_from(pieces: Iterable[Piece], base: LearnedHarmony | None = None) -> LearnedHarmony:
     """Habitudes tirées de `pieces`, ajoutées à une mémoire existante éventuelle."""
+    pieces = list(pieces)
     transitions, usage = count_habits(pieces)
     merged_t: dict[tuple[bool, str, str], int] = defaultdict(int, dict(base.transitions) if base else {})
     merged_u: dict[tuple[bool, str], float] = defaultdict(float, dict(base.usage) if base else {})
+    merged_c: dict[tuple[bool, str, str, str], int] = defaultdict(int, dict(base.contexts) if base else {})
     for (m, a, b), n in transitions.items():
         merged_t[(bool(m), a, b)] += n
     for (m, t), beats in usage.items():
         merged_u[(bool(m), t)] += beats
-    return LearnedHarmony(transitions=dict(merged_t), usage=dict(merged_u), prior=base.prior if base else None)
+    for (m, p, a, b), n in count_contexts(pieces).items():
+        merged_c[(bool(m), p, a, b)] += n
+    return LearnedHarmony(transitions=dict(merged_t), usage=dict(merged_u), contexts=dict(merged_c),
+                          prior=base.prior if base else None)
 
 
 class MusicMemory:
@@ -193,8 +253,9 @@ class MusicMemory:
     def store(self, source: str, label: str, result: StudyResult) -> int:
         """Enregistre (ou remplace) les leçons d'une séance. Retourne son identifiant."""
         transitions, usage = count_habits(result.pieces)
+        contexts = count_contexts(result.pieces)
         with self._db:
-            rid = self._replace_counts(source, label, result.duration_s, transitions, usage)
+            rid = self._replace_counts(source, label, result.duration_s, transitions, usage, contexts)
             for piece in result.pieces:
                 minor = int(piece.key.minor)
                 self._db.execute(
@@ -211,11 +272,12 @@ class MusicMemory:
         label: str,
         transitions: dict[tuple[int, str, str], int],
         usage: dict[tuple[int, str], float],
+        contexts: dict[tuple[int, str, str, str], int] | None = None,
         duration_s: float = 0.0,
     ) -> int:
         """Enregistre (ou remplace) des compteurs déjà faits, sans morceaux (corpus de grilles)."""
         with self._db:
-            return self._replace_counts(source, label, duration_s, transitions, usage)
+            return self._replace_counts(source, label, duration_s, transitions, usage, contexts or {})
 
     def _replace_counts(
         self,
@@ -224,6 +286,7 @@ class MusicMemory:
         duration_s: float,
         transitions: dict[tuple[int, str, str], int],
         usage: dict[tuple[int, str], float],
+        contexts: dict[tuple[int, str, str, str], int],
     ) -> int:
         self._db.execute("DELETE FROM recordings WHERE source = ?", (source,))
         cur = self._db.execute(
@@ -238,6 +301,10 @@ class MusicMemory:
         self._db.executemany(
             "INSERT INTO usage (recording_id, minor, rel, beats) VALUES (?, ?, ?, ?)",
             [(rid, int(m), t, beats) for (m, t), beats in usage.items()],
+        )
+        self._db.executemany(
+            "INSERT INTO contexts (recording_id, minor, prev_rel, from_rel, to_rel, count) VALUES (?, ?, ?, ?, ?, ?)",
+            [(rid, int(m), p, a, b, n) for (m, p, a, b), n in contexts.items()],
         )
         return rid
 
@@ -270,7 +337,15 @@ class MusicMemory:
                 f"SELECT minor, rel, SUM(beats) FROM usage {where} GROUP BY minor, rel", params
             )
         }
-        return LearnedHarmony(transitions=transitions, usage=usage)
+        contexts = {
+            (bool(m), p, a, b): int(n)
+            for m, p, a, b, n in self._db.execute(
+                f"SELECT minor, prev_rel, from_rel, to_rel, SUM(count) FROM contexts {where}"
+                " GROUP BY minor, prev_rel, from_rel, to_rel",
+                params,
+            )
+        }
+        return LearnedHarmony(transitions=transitions, usage=usage, contexts=contexts)
 
     def stats(self) -> dict[str, float]:
         rec, dur = self._db.execute("SELECT COUNT(*), COALESCE(SUM(duration_s), 0) FROM recordings").fetchone()
